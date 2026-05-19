@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peloton — Subscription Death Spiral Simulator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Brand tokens ── */
+    :root {
+      --black:   #000000;
+      --red:     #CC0000;
+      --red-lt:  #FF4444;
+      --white:   #FFFFFF;
+      --gray-dk: #1A1A1A;
+      --gray-md: #2E2E2E;
+      --gray-lt: #F2F2F2;
+      --gray-bd: #444444;
+      --warn:    #FF6B00;
+      --ok:      #22C55E;
+      --font:    'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--black);
+      color: var(--white);
+      font-family: var(--font);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--gray-dk);
+      border-bottom: 3px solid var(--red);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .logo-mark {
+      width: 40px; height: 40px;
+      background: var(--red);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 900; color: var(--white);
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    header p {
+      font-size: 0.72rem;
+      color: #aaa;
+      margin-top: 2px;
+      letter-spacing: 0.03em;
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
+    }
+
+    /* ── Source badge ── */
+    .source-badge {
+      display: inline-block;
+      background: var(--gray-md);
+      border: 1px solid var(--gray-bd);
+      border-radius: 4px;
+      font-size: 0.68rem;
+      color: #aaa;
+      padding: 4px 10px;
+      margin-bottom: 22px;
+      letter-spacing: 0.03em;
+    }
+    .source-badge strong { color: var(--white); }
+
+    /* ── Concept box ── */
+    .concept-box {
+      background: var(--gray-md);
+      border-left: 4px solid var(--red);
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin-bottom: 26px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #ccc;
+    }
+    .concept-box strong { color: var(--white); }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--gray-bd);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-family: var(--font);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn.active {
+      color: var(--white);
+      border-bottom-color: var(--red);
+    }
+    .tab-btn:hover { color: var(--white); }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Slider section ── */
+    .slider-section {
+      background: var(--gray-dk);
+      border: 1px solid var(--gray-bd);
+      border-radius: 10px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+    }
+    .slider-section h2 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #aaa;
+      margin-bottom: 16px;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .slider-label {
+      font-size: 0.82rem;
+      color: #ccc;
+      white-space: nowrap;
+      min-width: 200px;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      flex: 1;
+      min-width: 180px;
+      height: 6px;
+      background: var(--gray-bd);
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      background: var(--red);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(204,0,0,0.6);
+    }
+    .slider-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--red);
+      min-width: 60px;
+      text-align: right;
+    }
+
+    /* ── KPI grid ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--gray-dk);
+      border: 1px solid var(--gray-bd);
+      border-radius: 8px;
+      padding: 16px 18px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--gray-bd);
+    }
+    .kpi-card.danger::before  { background: var(--red); }
+    .kpi-card.warning::before { background: var(--warn); }
+    .kpi-card.ok::before      { background: var(--ok); }
+    .kpi-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 6px;
+    }
+    .kpi-value {
+      font-size: 1.55rem;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--white);
+    }
+    .kpi-value.red   { color: var(--red); }
+    .kpi-value.warn  { color: var(--warn); }
+    .kpi-value.green { color: var(--ok); }
+    .kpi-sub {
+      font-size: 0.68rem;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    /* ── Collapse alert ── */
+    .alert-box {
+      display: none;
+      background: rgba(204,0,0,0.15);
+      border: 2px solid var(--red);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+    .alert-box.visible { display: block; }
+    .alert-box h3 {
+      color: var(--red);
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    /* ── Charts ── */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 700px) {
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+    .chart-card {
+      background: var(--gray-dk);
+      border: 1px solid var(--gray-bd);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .chart-card h3 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #aaa;
+      margin-bottom: 14px;
+    }
+    .chart-wrap {
+      position: relative;
+      height: 220px;
+    }
+
+    /* ── Spiral table ── */
+    .spiral-table-wrap {
+      background: var(--gray-dk);
+      border: 1px solid var(--gray-bd);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+    .spiral-table-wrap h3 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #aaa;
+      margin-bottom: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--gray-md);
+      color: #aaa;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 0.68rem;
+      border-bottom: 1px solid var(--gray-bd);
+    }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      color: #ddd;
+    }
+    tr.collapse-row td { color: var(--red); font-weight: 700; }
+    tr:last-child td { border-bottom: none; }
+    td.neg { color: var(--red); }
+    td.warn { color: var(--warn); }
+    td.pos  { color: var(--ok); }
+
+    /* ── Footnote ── */
+    .footnote {
+      font-size: 0.67rem;
+      color: #555;
+      line-height: 1.6;
+      border-top: 1px solid var(--gray-bd);
+      padding-top: 16px;
+      margin-top: 8px;
+    }
+    .footnote a { color: #888; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">P</div>
+  <div>
+    <h1>Peloton — Subscription Death Spiral Simulator</h1>
+    <p>Cost Allocation Economics &nbsp;|&nbsp; FY2025 10-K Data &nbsp;|&nbsp; Client Advisory Tool</p>
+  </div>
+</header>
+
+<main>
+
+  <div class="source-badge">
+    Source: <strong>Peloton Interactive, Inc. FY2025 Form 10-K</strong> (fiscal year ended June 30, 2025) &nbsp;·&nbsp;
+    Filed August 7, 2025 &nbsp;·&nbsp; SEC Accession No. 0001639825-25-000138
+  </div>
+
+  <div class="concept-box">
+    <strong>The Death Spiral Mechanism:</strong> Peloton's subscription platform carries substantial <em>fixed costs</em>
+    (instructor salaries, content production, platform infrastructure, R&amp;D, G&amp;A) that do not decrease proportionally
+    when subscribers churn. As subscribers leave, these fixed costs are spread over a smaller base — raising the
+    <em>cost per subscriber</em>. To maintain margins, Peloton faces pressure to raise prices or cut content quality,
+    which accelerates churn further. This is a <strong>demand-driven death spiral</strong>.
+    Use the slider below to simulate the effect of subscriber loss on unit economics.
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('combined', this)">Combined View</button>
+    <button class="tab-btn" onclick="switchTab('cf', this)">Connected Fitness</button>
+    <button class="tab-btn" onclick="switchTab('app', this)">App Subscriptions</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       TAB: COMBINED
+  ══════════════════════════════════════════ -->
+  <div id="tab-combined" class="tab-panel active">
+
+    <div class="slider-section">
+      <h2>Simulate Subscriber Churn — Combined (Connected Fitness + App)</h2>
+      <div class="slider-row">
+        <span class="slider-label">Subscriber Retention Rate</span>
+        <input type="range" id="slider-combined" min="20" max="100" value="100" step="1"
+               oninput="updateCombined(this.value)">
+        <span class="slider-val" id="val-combined">100%</span>
+      </div>
+      <div style="margin-top:10px; font-size:0.72rem; color:#666;">
+        FY2025 Baseline: 2,880,000 Connected Fitness + 700,000 App = <strong style="color:#aaa">3,580,000 total paid subscribers</strong>
+      </div>
+    </div>
+
+    <div id="alert-combined" class="alert-box">
+      <h3>⚠ Death Spiral Collapse Threshold Reached</h3>
+      <p>At this subscriber level, Peloton's combined subscription segment generates <strong>negative gross margin</strong>.
+      Fixed costs exceed subscription revenue — the platform cannot sustain operations without external capital infusion
+      or drastic restructuring. Historical precedent (e.g., Quibi, MoviePass) shows this threshold is rarely recoverable
+      without fundamental business model change.</p>
+    </div>
+
+    <div class="kpi-grid" id="kpis-combined"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Cost Per Subscriber vs. Revenue Per Subscriber</h3>
+        <div class="chart-wrap"><canvas id="chart-combined-unit"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Subscription Gross Margin % as Subscribers Decline</h3>
+        <div class="chart-wrap"><canvas id="chart-combined-margin"></canvas></div>
+      </div>
+    </div>
+
+    <div class="spiral-table-wrap">
+      <h3>Death Spiral Iteration Table — Combined</h3>
+      <table id="table-combined">
+        <thead>
+          <tr>
+            <th>Iteration</th>
+            <th>Retention</th>
+            <th>Total Subs</th>
+            <th>Sub Revenue ($M)</th>
+            <th>Fixed Costs ($M)</th>
+            <th>Variable Costs ($M)</th>
+            <th>Gross Profit ($M)</th>
+            <th>Gross Margin %</th>
+            <th>Cost / Sub / Mo</th>
+            <th>Rev / Sub / Mo</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+  </div><!-- /tab-combined -->
+
+  <!-- ══════════════════════════════════════════
+       TAB: CONNECTED FITNESS
+  ══════════════════════════════════════════ -->
+  <div id="tab-cf" class="tab-panel">
+
+    <div class="slider-section">
+      <h2>Simulate Subscriber Churn — Connected Fitness Only</h2>
+      <div class="slider-row">
+        <span class="slider-label">Subscriber Retention Rate</span>
+        <input type="range" id="slider-cf" min="20" max="100" value="100" step="1"
+               oninput="updateCF(this.value)">
+        <span class="slider-val" id="val-cf">100%</span>
+      </div>
+      <div style="margin-top:10px; font-size:0.72rem; color:#666;">
+        FY2025 Baseline: <strong style="color:#aaa">2,880,000</strong> Paid Connected Fitness Subscriptions &nbsp;·&nbsp;
+        Avg. price: <strong style="color:#aaa">$44.00/mo</strong>
+      </div>
+    </div>
+
+    <div id="alert-cf" class="alert-box">
+      <h3>⚠ Death Spiral Collapse Threshold Reached — Connected Fitness</h3>
+      <p>Connected Fitness subscription gross margin has turned negative. The fixed cost base
+      (platform, instructors, content, allocated R&amp;D/G&amp;A) cannot be covered by the remaining subscriber base.
+      Each remaining subscriber is now being charged an <em>economically irrational</em> price relative to true unit cost.</p>
+    </div>
+
+    <div class="kpi-grid" id="kpis-cf"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Cost Per Sub vs. Revenue Per Sub (Connected Fitness)</h3>
+        <div class="chart-wrap"><canvas id="chart-cf-unit"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Gross Margin % — Connected Fitness</h3>
+        <div class="chart-wrap"><canvas id="chart-cf-margin"></canvas></div>
+      </div>
+    </div>
+
+    <div class="spiral-table-wrap">
+      <h3>Death Spiral Iteration Table — Connected Fitness</h3>
+      <table id="table-cf">
+        <thead>
+          <tr>
+            <th>Iteration</th>
+            <th>Retention</th>
+            <th>CF Subs</th>
+            <th>CF Revenue ($M)</th>
+            <th>Fixed Costs ($M)</th>
+            <th>Variable Costs ($M)</th>
+            <th>Gross Profit ($M)</th>
+            <th>Gross Margin %</th>
+            <th>Cost / Sub / Mo</th>
+            <th>Rev / Sub / Mo</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+  </div><!-- /tab-cf -->
+
+  <!-- ══════════════════════════════════════════
+       TAB: APP
+  ══════════════════════════════════════════ -->
+  <div id="tab-app" class="tab-panel">
+
+    <div class="slider-section">
+      <h2>Simulate Subscriber Churn — App Subscriptions Only</h2>
+      <div class="slider-row">
+        <span class="slider-label">Subscriber Retention Rate</span>
+        <input type="range" id="slider-app" min="20" max="100" value="100" step="1"
+               oninput="updateApp(this.value)">
+        <span class="slider-val" id="val-app">100%</span>
+      </div>
+      <div style="margin-top:10px; font-size:0.72rem; color:#666;">
+        FY2025 Baseline: <strong style="color:#aaa">700,000</strong> Paid App Subscriptions &nbsp;·&nbsp;
+        Avg. price: <strong style="color:#aaa">$12.99/mo</strong>
+      </div>
+    </div>
+
+    <div id="alert-app" class="alert-box">
+      <h3>⚠ Death Spiral Collapse Threshold Reached — App</h3>
+      <p>App subscription revenue can no longer cover its allocated share of fixed platform and content costs.
+      The App tier, which relies on the same instructor content and technology infrastructure as Connected Fitness,
+      becomes a net cost center — accelerating pressure on the Connected Fitness segment to absorb more overhead.</p>
+    </div>
+
+    <div class="kpi-grid" id="kpis-app"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Cost Per Sub vs. Revenue Per Sub (App)</h3>
+        <div class="chart-wrap"><canvas id="chart-app-unit"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Gross Margin % — App</h3>
+        <div class="chart-wrap"><canvas id="chart-app-margin"></canvas></div>
+      </div>
+    </div>
+
+    <div class="spiral-table-wrap">
+      <h3>Death Spiral Iteration Table — App</h3>
+      <table id="table-app">
+        <thead>
+          <tr>
+            <th>Iteration</th>
+            <th>Retention</th>
+            <th>App Subs</th>
+            <th>App Revenue ($M)</th>
+            <th>Fixed Costs ($M)</th>
+            <th>Variable Costs ($M)</th>
+            <th>Gross Profit ($M)</th>
+            <th>Gross Margin %</th>
+            <th>Cost / Sub / Mo</th>
+            <th>Rev / Sub / Mo</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+  </div><!-- /tab-app -->
+
+  <div class="footnote">
+    <strong>Data Sources &amp; Methodology:</strong> All baseline figures sourced from Peloton Interactive, Inc. FY2025 Form 10-K
+    (fiscal year ended June 30, 2025; filed August 7, 2025; SEC Accession No. 0001639825-25-000138).
+    <br><br>
+    <strong>Key FY2025 figures used:</strong>
+    Connected Fitness paid subscriptions: 2,880,000 · App paid subscriptions: ~700,000 ·
+    Total subscription cost of revenue: $516.6M · Subscription revenue: ~$1,430M (annualized) ·
+    CF avg. monthly price: $44.00 · App avg. monthly price: $12.99 ·
+    Monthly churn rate (FY2025): 1.2%.
+    <br><br>
+    <strong>Fixed vs. Variable Cost Classification:</strong>
+    Subscription cost of revenue ($516.6M) is treated as predominantly fixed (instructor salaries, content production,
+    platform infrastructure, music royalties at minimum guarantee levels). A variable component of ~$8/sub/year
+    (payment processing, music overages, customer support) is modeled separately.
+    Connected Fitness fixed cost allocation: ~73% of subscription fixed base (~$377M).
+    App fixed cost allocation: ~27% (~$140M), reflecting lower content intensity.
+    R&amp;D ($174M) and G&amp;A ($284M) are excluded per instructions (not subscription-segment-specific overhead).
+    <br><br>
+    <strong>Collapse Threshold:</strong> Defined as the point at which subscription gross margin turns negative (gross profit &lt; $0).
+    This widget is intended for educational and advisory purposes only. Projections are illustrative.
+  </div>
+
+</main>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  FY2025 10-K BASELINE DATA
+// ══════════════════════════════════════════════════════════════
+const DATA = {
+  // Connected Fitness
+  cf: {
+    baseSubs:       2_880_000,
+    avgPricePerMo:  44.00,          // ~$44/mo all-in avg
+    // Fixed costs allocated to CF segment (73% of $516.6M sub CoR)
+    fixedCostAnnual: 377_118_000,   // $377.1M
+    // Variable cost per sub per year (payment processing, support, music overages)
+    varCostPerSubPerYear: 8.00,
+  },
+  // App
+  app: {
+    baseSubs:       700_000,
+    avgPricePerMo:  12.99,
+    // Fixed costs allocated to App segment (27% of $516.6M)
+    fixedCostAnnual: 139_482_000,   // $139.5M
+    varCostPerSubPerYear: 4.00,
+  },
+};
+
+// ══════════════════════════════════════════════════════════════
+//  CHART INSTANCES
+// ══════════════════════════════════════════════════════════════
+let charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CORE CALCULATION ENGINE
+// ══════════════════════════════════════════════════════════════
+function calcSegment(seg, retentionPct) {
+  const d = DATA[seg];
+  const subs       = Math.round(d.baseSubs * retentionPct / 100);
+  const revAnnual  = subs * d.avgPricePerMo * 12;
+  const varCost    = subs * d.varCostPerSubPerYear;
+  const totalCost  = d.fixedCostAnnual + varCost;
+  const grossProfit = revAnnual - totalCost;
+  const grossMargin = revAnnual > 0 ? (grossProfit / revAnnual) * 100 : -999;
+  const costPerSubMo = subs > 0 ? totalCost / subs / 12 : 0;
+  const revPerSubMo  = d.avgPricePerMo;
+  return { subs, revAnnual, varCost, totalCost, grossProfit, grossMargin, costPerSubMo, revPerSubMo };
+}
+
+function calcCombined(retentionPct) {
+  const cf  = calcSegment('cf',  retentionPct);
+  const app = calcSegment('app', retentionPct);
+  const subs        = cf.subs + app.subs;
+  const revAnnual   = cf.revAnnual + app.revAnnual;
+  const totalCost   = cf.totalCost + app.totalCost;
+  const varCost     = cf.varCost + app.varCost;
+  const grossProfit = revAnnual - totalCost;
+  const grossMargin = revAnnual > 0 ? (grossProfit / revAnnual) * 100 : -999;
+  // Blended cost per sub per month
+  const costPerSubMo = subs > 0 ? totalCost / subs / 12 : 0;
+  // Blended rev per sub per month
+  const revPerSubMo  = subs > 0 ? revAnnual / subs / 12 : 0;
+  return { subs, revAnnual, varCost, totalCost, grossProfit, grossMargin, costPerSubMo, revPerSubMo };
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SPIRAL TABLE GENERATOR (10 steps from 100% down to current)
+// ══════════════════════════════════════════════════════════════
+function buildSpiralSteps(mode, currentRetention) {
+  const steps = [];
+  const stepSize = (100 - currentRetention) / 9 || 5;
+  for (let i = 0; i <= 9; i++) {
+    const ret = Math.max(currentRetention, Math.round(100 - i * stepSize));
+    steps.push(ret);
+  }
+  // Always include 100% as first
+  const unique = [100, ...steps].filter((v, i, a) => a.indexOf(v) === i).sort((a,b) => b-a);
+  return unique.slice(0, 12);
+}
+
+function renderTable(tableId, mode, currentRetention) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = '';
+
+  const retentions = [];
+  for (let r = 100; r >= 20; r -= 5) retentions.push(r);
+
+  retentions.forEach((ret, idx) => {
+    let calc;
+    if (mode === 'combined') calc = calcCombined(ret);
+    else calc = calcSegment(mode, ret);
+
+    const isCollapse = calc.grossMargin < 0;
+    const isCurrent  = ret === Math.round(currentRetention / 5) * 5 || ret === currentRetention;
+    const tr = document.createElement('tr');
+    if (isCollapse) tr.classList.add('collapse-row');
+
+    const fmt = (n, dec=1) => n.toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+    const fmtM = (n) => '$' + (n/1e6).toFixed(1) + 'M';
+
+    const marginClass = calc.grossMargin < 0 ? 'neg' : calc.grossMargin < 30 ? 'warn' : 'pos';
+    const status = calc.grossMargin < 0 ? '🔴 COLLAPSE' : calc.grossMargin < 30 ? '🟡 At Risk' : '🟢 Viable';
+
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${ret}%</td>
+      <td>${calc.subs.toLocaleString()}</td>
+      <td>${fmtM(calc.revAnnual)}</td>
+      <td>${fmtM(DATA.cf ? (mode==='combined' ? DATA.cf.fixedCostAnnual+DATA.app.fixedCostAnnual : DATA[mode].fixedCostAnnual) : 0)}</td>
+      <td>${fmtM(calc.varCost)}</td>
+      <td class="${calc.grossProfit<0?'neg':''}">${fmtM(calc.grossProfit)}</td>
+      <td class="${marginClass}">${fmt(calc.grossMargin)}%</td>
+      <td class="${calc.costPerSubMo > calc.revPerSubMo ? 'neg' : ''}">$${fmt(calc.costPerSubMo)}</td>
+      <td>$${fmt(calc.revPerSubMo)}</td>
+      <td>${status}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  KPI CARDS
+// ══════════════════════════════════════════════════════════════
+function renderKPIs(containerId, calc, baseline, mode) {
+  const el = document.getElementById(containerId);
+  const subsLost = baseline.subs - calc.subs;
+  const revLost  = baseline.revAnnual - calc.revAnnual;
+  const marginClass = calc.grossMargin < 0 ? 'danger' : calc.grossMargin < 30 ? 'warning' : 'ok';
+  const marginColor = calc.grossMargin < 0 ? 'red' : calc.grossMargin < 30 ? 'warn' : 'green';
+
+  el.innerHTML = `
+    <div class="kpi-card ${calc.subs < baseline.subs ? 'warning' : 'ok'}">
+      <div class="kpi-label">Active Subscribers</div>
+      <div class="kpi-value">${(calc.subs/1e6).toFixed(2)}M</div>
+      <div class="kpi-sub">Lost: ${subsLost.toLocaleString()}</div>
+    </div>
+    <div class="kpi-card ${revLost>0?'warning':'ok'}">
+      <div class="kpi-label">Annual Sub Revenue</div>
+      <div class="kpi-value">$${(calc.revAnnual/1e6).toFixed(0)}M</div>
+      <div class="kpi-sub">Lost: $${(revLost/1e6).toFixed(0)}M</div>
+    </div>
+    <div class="kpi-card ${marginClass}">
+      <div class="kpi-label">Gross Margin %</div>
+      <div class="kpi-value ${marginColor}">${calc.grossMargin.toFixed(1)}%</div>
+      <div class="kpi-sub">Baseline: ${baseline.grossMargin.toFixed(1)}%</div>
+    </div>
+    <div class="kpi-card ${calc.costPerSubMo > calc.revPerSubMo ? 'danger' : 'ok'}">
+      <div class="kpi-label">Cost / Sub / Month</div>
+      <div class="kpi-value ${calc.costPerSubMo > calc.revPerSubMo ? 'red' : ''}">$${calc.costPerSubMo.toFixed(2)}</div>
+      <div class="kpi-sub">Rev/sub/mo: $${calc.revPerSubMo.toFixed(2)}</div>
+    </div>
+    <div class="kpi-card ${calc.grossProfit < 0 ? 'danger' : 'ok'}">
+      <div class="kpi-label">Gross Profit</div>
+      <div class="kpi-value ${calc.grossProfit < 0 ? 'red' : 'green'}">$${(calc.grossProfit/1e6).toFixed(0)}M</div>
+      <div class="kpi-sub">Total cost: $${(calc.totalCost/1e6).toFixed(0)}M</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Fixed Cost / Sub / Mo</div>
+      <div class="kpi-value ${calc.grossMargin<0?'red':''}">$${(DATA[mode==='combined'?'cf':mode].fixedCostAnnual*(mode==='combined'?2:1)/calc.subs/12).toFixed(2)}</div>
+      <div class="kpi-sub">Fixed costs don't shrink with churn</div>
+    </div>
+  `;
+
+  // Fix the combined fixed cost display
+  if (mode === 'combined') {
+    const totalFixed = DATA.cf.fixedCostAnnual + DATA.app.fixedCostAnnual;
+    const fixedPerSubMo = calc.subs > 0 ? totalFixed / calc.subs / 12 : 0;
+    el.querySelectorAll('.kpi-card')[5].innerHTML = `
+      <div class="kpi-label">Fixed Cost / Sub / Mo</div>
+      <div class="kpi-value ${calc.grossMargin<0?'red':''}">$${fixedPerSubMo.toFixed(2)}</div>
+      <div class="kpi-sub">Fixed costs don't shrink with churn</div>
+    `;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CHARTS
+// ══════════════════════════════════════════════════════════════
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } },
+  scales: {
+    x: { ticks: { color: '#888', font:{size:10} }, grid: { color: 'rgba(255,255,255,0.05)' } },
+    y: { ticks: { color: '#888', font:{size:10} }, grid: { color: 'rgba(255,255,255,0.07)' } },
+  }
+};
+
+function buildChartData(mode) {
+  const labels = [];
+  const costData = [], revData = [], marginData = [];
+  for (let r = 100; r >= 20; r -= 5) {
+    labels.push(r + '%');
+    let calc = mode === 'combined' ? calcCombined(r) : calcSegment(mode, r);
+    costData.push(+calc.costPerSubMo.toFixed(2));
+    revData.push(+calc.revPerSubMo.toFixed(2));
+    marginData.push(+calc.grossMargin.toFixed(1));
+  }
+  return { labels, costData, revData, marginData };
+}
+
+function renderCharts(mode, unitId, marginId) {
+  destroyChart(unitId);
+  destroyChart(marginId);
+  const { labels, costData, revData, marginData } = buildChartData(mode);
+
+  charts[unitId] = new Chart(document.getElementById(unitId), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Cost / Sub / Mo',
+          data: costData,
+          borderColor: '#CC0000',
+          backgroundColor: 'rgba(204,0,0,0.1)',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 3,
+        },
+        {
+          label: 'Revenue / Sub / Mo',
+          data: revData,
+          borderColor: '#22C55E',
+          backgroundColor: 'rgba(34,197,94,0.1)',
+          fill: false,
+          tension: 0,
+          borderDash: [6,3],
+          pointRadius: 3,
+        }
+      ]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: { callbacks: { label: ctx => ' $' + ctx.parsed.y.toFixed(2) } }
+      },
+      scales: {
+        ...CHART_DEFAULTS.scales,
+        y: { ...CHART_DEFAULTS.scales.y, ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => '$'+v } }
+      }
+    }
+  });
+
+  const marginColors = marginData.map(v => v < 0 ? 'rgba(204,0,0,0.8)' : v < 30 ? 'rgba(255,107,0,0.7)' : 'rgba(34,197,94,0.7)');
+  charts[marginId] = new Chart(document.getElementById(marginId), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Gross Margin %',
+        data: marginData,
+        backgroundColor: marginColors,
+        borderColor: marginColors,
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.parsed.y.toFixed(1) + '%' } }
+      },
+      scales: {
+        ...CHART_DEFAULTS.scales,
+        y: { ...CHART_DEFAULTS.scales.y, ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => v+'%' } }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UPDATE HANDLERS
+// ══════════════════════════════════════════════════════════════
+function updateCombined(val) {
+  document.getElementById('val-combined').textContent = val + '%';
+  const calc     = calcCombined(+val);
+  const baseline = calcCombined(100);
+  renderKPIs('kpis-combined', calc, baseline, 'combined');
+  renderTable('table-combined', 'combined', +val);
+  renderCharts('combined', 'chart-combined-unit', 'chart-combined-margin');
+  const alert = document.getElementById('alert-combined');
+  calc.grossMargin < 0 ? alert.classList.add('visible') : alert.classList.remove('visible');
+}
+
+function updateCF(val) {
+  document.getElementById('val-cf').textContent = val + '%';
+  const calc     = calcSegment('cf', +val);
+  const baseline = calcSegment('cf', 100);
+  renderKPIs('kpis-cf', calc, baseline, 'cf');
+  renderTable('table-cf', 'cf', +val);
+  renderCharts('cf', 'chart-cf-unit', 'chart-cf-margin');
+  const alert = document.getElementById('alert-cf');
+  calc.grossMargin < 0 ? alert.classList.add('visible') : alert.classList.remove('visible');
+}
+
+function updateApp(val) {
+  document.getElementById('val-app').textContent = val + '%';
+  const calc     = calcSegment('app', +val);
+  const baseline = calcSegment('app', 100);
+  renderKPIs('kpis-app', calc, baseline, 'app');
+  renderTable('table-app', 'app', +val);
+  renderCharts('app', 'chart-app-unit', 'chart-app-margin');
+  const alert = document.getElementById('alert-app');
+  calc.grossMargin < 0 ? alert.classList.add('visible') : alert.classList.remove('visible');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TAB SWITCHER
+// ══════════════════════════════════════════════════════════════
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  // Re-render charts on tab switch (canvas sizing fix)
+  setTimeout(() => {
+    if (name === 'combined') renderCharts('combined', 'chart-combined-unit', 'chart-combined-margin');
+    if (name === 'cf')       renderCharts('cf', 'chart-cf-unit', 'chart-cf-margin');
+    if (name === 'app')      renderCharts('app', 'chart-app-unit', 'chart-app-margin');
+  }, 50);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  updateCombined(100);
+  updateCF(100);
+  updateApp(100);
+});
+</script>
+</body>
+</html>
